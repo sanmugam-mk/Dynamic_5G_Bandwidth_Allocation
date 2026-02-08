@@ -1,56 +1,52 @@
 import numpy as np
-from qiskit_optimization import QuadraticProgram
-from qiskit_algorithms import QAOA
-from qiskit.primitives import Sampler
-from qiskit_optimization.algorithms import MinimumEigenOptimizer
+
+from qiskit import QuantumCircuit, transpile
+from qiskit_aer import AerSimulator
 
 
-def qaoa_chunk_optimize(prb_demands, total_prbs):
-    n = len(prb_demands)
-
-    qp = QuadraticProgram()
-
-    for i in range(n):
-        qp.binary_var(name=f"x{i}")
-
-    qp.maximize(linear={f"x{i}": 1 for i in range(n)})
-
-    qp.linear_constraint(
-        linear={f"x{i}": prb_demands[i] for i in range(n)},
-        sense="<=",
-        rhs=total_prbs,
-        name="limit",
-    )
-
-    sampler = Sampler()
-    qaoa = QAOA(sampler=sampler, reps=2)
-    optimizer = MinimumEigenOptimizer(qaoa)
-
-    result = optimizer.solve(qp)
-
-    return np.array(result.x)
-
-
-def quantum_optimize(prb_demands, total_prbs, chunk_size=10):
+def quantum_optimize(demands, total_prbs):
     """
-    Runs QAOA in chunks to scale for large users.
+    QAOA-like selection using quantum sampling.
+    Selects users probabilistically based on demand.
     """
 
-    final_mask = []
-    remaining_prbs = total_prbs
+    n = len(demands)
 
-    for i in range(0, len(prb_demands), chunk_size):
-        chunk = prb_demands[i:i+chunk_size]
+    # limit qubits for simulation safety
+    n_qubits = min(n, 12)
 
-        if remaining_prbs <= 0:
-            final_mask.extend([0]*len(chunk))
-            continue
+    simulator = AerSimulator()
 
-        mask = qaoa_chunk_optimize(chunk, remaining_prbs)
+    qc = QuantumCircuit(n_qubits, n_qubits)
 
-        used = np.sum(mask * chunk)
-        remaining_prbs -= used
+    # superposition
+    qc.h(range(n_qubits))
 
-        final_mask.extend(mask)
+    # bias rotation proportional to demand
+    for i in range(n_qubits):
+        angle = float(demands[i]) / (max(demands) + 1e-9)
+        qc.ry(angle * np.pi, i)
 
-    return np.array(final_mask[:len(prb_demands)])
+    qc.measure(range(n_qubits), range(n_qubits))
+
+    compiled = transpile(qc, simulator)
+    result = simulator.run(compiled, shots=256).result()
+
+    counts = result.get_counts()
+
+    # pick most frequent bitstring
+    best = max(counts, key=counts.get)
+
+    mask = np.array(list(map(int, best[::-1])))
+
+    allocation = np.zeros(n)
+
+    remaining = total_prbs
+
+    for i, select in enumerate(mask):
+        if select and remaining > 0:
+            alloc = min(demands[i], remaining)
+            allocation[i] = alloc
+            remaining -= alloc
+
+    return allocation
