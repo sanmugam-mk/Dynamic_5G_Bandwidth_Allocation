@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-#from app.api.routes import router
+from app.api.sample import router
 
 app = FastAPI(
     title="5G Network Simulator Backend",
@@ -7,4 +7,4 @@ app = FastAPI(
     version="1.0"
 )
 
-#app.include_router(router)
+app.include_router(router)

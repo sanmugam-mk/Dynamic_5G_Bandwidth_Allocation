@@ -1,4 +1,4 @@
-from typing import Dict
+"""from typing import Dict
 from pydantic import BaseModel
 
 class DemandSchema(BaseModel):
@@ -12,4 +12,14 @@ class AllocationSchema(BaseModel):
 
 class NetworkStateSchema(BaseModel):
     timestamp: float
-    users: Dict[str, Dict[str, float]]
+    users: Dict[str, Dict[str, float]]"""
+from pydantic import BaseModel
+from typing import Dict
+
+class UserAllocation(BaseModel):
+    demand_prbs: int
+    allocated_prbs: int
+    remaining_buffer: float
+
+class AllocationPayload(BaseModel):
+    allocations: Dict[int, UserAllocation]
