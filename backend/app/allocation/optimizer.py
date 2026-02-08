@@ -5,40 +5,52 @@ from qiskit.primitives import Sampler
 from qiskit_optimization.algorithms import MinimumEigenOptimizer
 
 
-def quantum_optimize(prb_demands, total_prbs):
-    """
-    Select max users under PRB constraint using QAOA
-    """
-
-    num_users = len(prb_demands)
+def qaoa_chunk_optimize(prb_demands, total_prbs):
+    n = len(prb_demands)
 
     qp = QuadraticProgram()
 
-    # binary decision variable per user
-    for i in range(num_users):
+    for i in range(n):
         qp.binary_var(name=f"x{i}")
 
-    # maximize number of served users
-    qp.maximize(
-        linear={f"x{i}": 1 for i in range(num_users)}
-    )
+    qp.maximize(linear={f"x{i}": 1 for i in range(n)})
 
-    # PRB constraint
     qp.linear_constraint(
-        linear={f"x{i}": prb_demands[i] for i in range(num_users)},
+        linear={f"x{i}": prb_demands[i] for i in range(n)},
         sense="<=",
         rhs=total_prbs,
-        name="prb_limit"
+        name="limit",
     )
 
-    # QAOA backend
     sampler = Sampler()
     qaoa = QAOA(sampler=sampler, reps=2)
-
     optimizer = MinimumEigenOptimizer(qaoa)
 
     result = optimizer.solve(qp)
 
-    solution = np.array(result.x)
+    return np.array(result.x)
 
-    return solution
+
+def quantum_optimize(prb_demands, total_prbs, chunk_size=10):
+    """
+    Runs QAOA in chunks to scale for large users.
+    """
+
+    final_mask = []
+    remaining_prbs = total_prbs
+
+    for i in range(0, len(prb_demands), chunk_size):
+        chunk = prb_demands[i:i+chunk_size]
+
+        if remaining_prbs <= 0:
+            final_mask.extend([0]*len(chunk))
+            continue
+
+        mask = qaoa_chunk_optimize(chunk, remaining_prbs)
+
+        used = np.sum(mask * chunk)
+        remaining_prbs -= used
+
+        final_mask.extend(mask)
+
+    return np.array(final_mask[:len(prb_demands)])
