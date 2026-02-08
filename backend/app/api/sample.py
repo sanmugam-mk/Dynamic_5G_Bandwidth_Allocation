@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 from app.database.mongo import usage_collection
 from app.database.schemas import AllocationPayload
+import struct 
 
 router = APIRouter()
 
@@ -36,13 +37,23 @@ def fetch_for_gnuradio():
     Fetches latest allocation data from MongoDB
     (For now, prints it in terminal)
     """
-
-    print("\n===== DATA SENT TO GNU RADIO =====")
+    data = []
 
     for doc in usage_collection.find({}, {"_id": 0}):
-        print(doc)
+        data.append(float(doc["demand_prbs"]))
+        data.append(float(doc["allocated_prbs"]))
+        data.append(float(doc["remaining_buffer"]))
 
-    print("=================================\n")
+    # Write binary file (float32)
+    with open("gnuradio_input.bin", "wb") as f:
+        for value in data:
+            f.write(struct.pack("f", value))
 
-    return {"status": "data fetched"}
+    print("Binary file written: gnuradio_input.bin")
+    print("Total float values:", len(data))
+
+    return {
+        "status": "binary file generated",
+        "values_written": len(data)
+    }
 
