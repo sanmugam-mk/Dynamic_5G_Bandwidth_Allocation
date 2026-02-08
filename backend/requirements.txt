@@ -1,0 +1,6 @@
+fastapi 
+uvicorn 
+pymongo 
+numpy
+qiskit 
+qiskit_aer
